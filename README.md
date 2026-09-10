@@ -1,20 +1,13 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# ResolvSafe 🛡️
+> **Next-Generation Enterprise Complaint & Grievance Management System**
 
-# Run and deploy your AI Studio app
+ResolvSafe is a secure, full-stack grievance resolution platform designed to streamline issue reporting, investigation, and resolution across organizations. Built with React 19, TypeScript, Express, and MongoDB, it bridges complainants, support agents, and administrators through real-time communication, role-based workflows, and actionable resolution analytics.
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/5ac58e10-d29e-4090-a770-693d205bb9cb
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### ✨ Key Features
+- 🔐 **Multi-Role Access Control (RBAC):** Dedicated views & permissions for Complainants/Users, Support Agents, and Administrators.
+- 🕵️ **Anonymous Reporting:** Safe and confidential grievance filing to support whistleblower protection and privacy.
+- ⚡ **Real-Time Ticket Lifecycle & Timeline:** Track complaints across status stages (`New`, `In Progress`, `Pending Info`, `Resolved`, `Rejected`) with full audit histories.
+- 💬 **Live Chat & Messaging:** Direct communication thread between complainants and assigned agents on individual tickets.
+- 🚨 **Emergency Escalation:** Rapid escalation workflow for high-priority or critical incidents.
+- 📊 **Executive Analytics & SLA Dashboard:** Track resolution trends, departmental response times, agent workloads, and user feedback ratings.
+- ⚡ **Modern Stack:** Built on React 19, TypeScript, Tailwind CSS, Motion, Express.js, and MongoDB / Mongoose.
