@@ -1,0 +1,6 @@
+{
+  "name": "ResolvSafe",
+  "description": "Enterprise complaint management system with secure authentication, multi-role access, real-time tracking, live communication, and analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
