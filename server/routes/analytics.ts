@@ -23,10 +23,10 @@ router.get('/', authenticateToken, requireRole(['admin']), async (_req: AuthRequ
 
     const resolved = complaints.filter((c) => c.status === 'resolved').length;
     const pending = complaints.filter(
-      (c) => c.status === 'pending' || c.status === 'pending_info'
+      (c) => c.status === 'pending' || c.status === 'pending_info' || c.status === 'new'
     ).length;
     const openCount = complaints.filter(
-      (c) => c.status === 'new' || c.status === 'in_progress'
+      (c) => c.status === 'in_progress'
     ).length;
 
     const statusDistribution = {

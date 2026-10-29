@@ -24,12 +24,14 @@ interface ComplaintDetailsViewProps {
   complaintId: string;
   onBack: () => void;
   onOpenFeedback: (complaintId: string) => void;
+  onStatusUpdated?: () => void;
 }
 
 export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
   complaintId,
   onBack,
   onOpenFeedback,
+  onStatusUpdated,
 }) => {
   const { user } = useAuth();
   const [complaint, setComplaint] = useState<Complaint | null>(null);
@@ -39,8 +41,12 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
   const [sending, setSending] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [availableAgents, setAvailableAgents] = useState<any[]>([]);
+  const [assignAgentId, setAssignAgentId] = useState('');
+  const [assigning, setAssigning] = useState(false);
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessagesCountRef = useRef(0);
 
   // Load complaint data
   const loadData = async () => {
@@ -60,16 +66,30 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
 
   useEffect(() => {
     loadData();
+    if (user?.role === 'admin') {
+      api.getUsers().then((res) => {
+        setAvailableAgents(res.users.filter((u) => u.role === 'agent' || u.role === 'admin'));
+      }).catch(console.error);
+    }
     const interval = setInterval(() => {
       api.getMessages(complaintId).then((res) => {
         setMessages(res.messages);
       }).catch(() => {});
     }, 4000);
     return () => clearInterval(interval);
+  }, [complaintId, user?.role]);
+
+  useEffect(() => {
+    prevMessagesCountRef.current = 0;
   }, [complaintId]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length > prevMessagesCountRef.current) {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }
+    prevMessagesCountRef.current = messages.length;
   }, [messages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -94,7 +114,8 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
     try {
       const res = await api.updateComplaintStatus(complaint.id, nextStatus);
       setComplaint(res.complaint);
-      if (nextStatus === 'resolved') {
+      if (onStatusUpdated) onStatusUpdated();
+      if (nextStatus === 'resolved' && user?.role === 'user') {
         onOpenFeedback(complaint.id);
       }
     } catch (err) {
@@ -104,10 +125,72 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
     }
   };
 
+  const handleAssignAgentDirect = async () => {
+    if (!complaint || !assignAgentId) return;
+    setAssigning(true);
+    try {
+      const res = await api.assignAgent(complaint.id, assignAgentId);
+      setComplaint(res.complaint);
+      setAssignAgentId('');
+      if (onStatusUpdated) onStatusUpdated();
+    } catch (err) {
+      console.error('Failed to assign agent', err);
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const getTopStatusBadge = (status: ComplaintStatus) => {
+    switch (status) {
+      case 'in_progress':
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#00288e] border border-blue-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#00288e]" />
+            In Progress
+          </span>
+        );
+      case 'new':
+      case 'pending':
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-800 border border-amber-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            Pending
+          </span>
+        );
+      case 'resolved':
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-800 border border-emerald-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Resolved
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-rose-700 border border-rose-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+            Rejected
+          </span>
+        );
+      case 'pending_info':
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-purple-800 border border-purple-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+            Pending Info
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-700">
+            {status}
+          </span>
+        );
+    }
   };
 
   if (loading || !complaint) {
@@ -117,18 +200,6 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
       </div>
     );
   }
-
-  const agent = complaint.assignedAgent || {
-    id: 'agent-fallback',
-    name: 'Marcus T.',
-    role: 'Senior Safety Liaison',
-    email: 'marcus.t@resolvsafe.internal',
-    phone: '+1 (555) 890-1234',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCQfOAKN-gTqquyA3onLB_DCL9bnvXA_7zwKQwvhs1daCV_gzbMrMZrNhnP0gmSNevbw2qdfX-GL2_npCRhC4dcqW-wRs5P-FU-1H1KWuXdJFgBb1gm5bjXDHSyleQ76s-hCLH1Cqp4STi_xlkhWXfqfqFjn4VzetXwHxTi93TV6OscmTzXG3qtztIt8jPDPW6REb_K1R0IdrVT02hM6R4wHCuSyl-XH3cYlcEtJoskzfwyAj4SP-iY',
-    department: 'Facilities Mgmt',
-    avgResponseTime: '1.2 hrs',
-  };
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
@@ -167,31 +238,30 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
             <span className="font-mono text-base font-bold text-[#00288e]">
               #{complaint.id}
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#00288e] border border-blue-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#00288e]" />
-              {complaint.status.replace('_', ' ')}
-            </span>
+            {getTopStatusBadge(complaint.status)}
             <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-rose-700 border border-rose-200">
               {complaint.priority}
             </span>
           </div>
 
           {/* Quick status dropdown for Agents/Admins */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Update Status:</span>
-            <select
-              value={complaint.status}
-              disabled={statusUpdating}
-              onChange={(e) => handleStatusUpdate(e.target.value as ComplaintStatus)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 focus:border-[#00288e] focus:outline-hidden"
-            >
-              <option value="new">New</option>
-              <option value="in_progress">In Progress</option>
-              <option value="pending_info">Pending Info</option>
-              <option value="resolved">Resolved</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </div>
+          {(user?.role === 'agent' || user?.role === 'admin') && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">Update Status:</span>
+              <select
+                value={complaint.status === 'new' ? 'pending' : complaint.status}
+                disabled={statusUpdating}
+                onChange={(e) => handleStatusUpdate(e.target.value as ComplaintStatus)}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 focus:border-[#00288e] focus:outline-hidden"
+              >
+                <option value="pending">Pending</option>
+                <option value="in_progress">In Progress</option>
+                <option value="pending_info">Pending Info</option>
+                <option value="resolved">Resolved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <div>
@@ -337,46 +407,103 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">Assigned Agent</h3>
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                Online
-              </span>
+              {complaint.assignedAgent ? (
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                  Online
+                </span>
+              ) : (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
+                  Awaiting Assignment
+                </span>
+              )}
             </div>
 
-            <div className="flex items-center gap-3">
-              <img
-                src={agent.avatar}
-                alt={agent.name}
-                referrerPolicy="no-referrer"
-                className="h-12 w-12 rounded-full object-cover ring-2 ring-slate-100 shadow-xs"
-              />
-              <div>
-                <div className="font-bold text-sm text-slate-900">{agent.name}</div>
-                <div className="text-xs text-[#00288e] font-medium">{agent.role}</div>
-                <div className="text-[11px] text-slate-400">{agent.department}</div>
+            {complaint.assignedAgent ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={complaint.assignedAgent.avatar}
+                    alt={complaint.assignedAgent.name}
+                    referrerPolicy="no-referrer"
+                    className="h-12 w-12 rounded-full object-cover ring-2 ring-slate-100 shadow-xs"
+                  />
+                  <div>
+                    <div className="font-bold text-sm text-slate-900">{complaint.assignedAgent.name}</div>
+                    <div className="text-xs text-[#00288e] font-medium">{complaint.assignedAgent.role}</div>
+                    <div className="text-[11px] text-slate-400">{complaint.assignedAgent.department}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <a
+                    href={`mailto:${complaint.assignedAgent.email}`}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 py-2 font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    <span>Email</span>
+                  </a>
+                  <a
+                    href={`tel:${complaint.assignedAgent.phone}`}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 py-2 font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                    <span>Call</span>
+                  </a>
+                </div>
+
+                <div className="rounded-xl bg-blue-50/60 p-2.5 border border-blue-100 text-[11px] text-blue-900 flex items-center justify-between">
+                  <span>Avg Response Time:</span>
+                  <span className="font-bold">{complaint.assignedAgent.avgResponseTime || '1.2 hrs'}</span>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 ring-2 ring-slate-100">
+                    <User className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-slate-900">Not Assigned Yet</div>
+                    <div className="text-xs text-slate-500 font-medium">Pending Administrative Triage</div>
+                    <div className="text-[11px] text-slate-400">{complaint.department}</div>
+                  </div>
+                </div>
+
+                {user?.role === 'admin' ? (
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <label className="text-[11px] font-semibold text-slate-600 block">
+                      Assign Agent to Investigate:
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={assignAgentId}
+                        onChange={(e) => setAssignAgentId(e.target.value)}
+                        className="flex-1 rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-800 focus:border-[#00288e] focus:bg-white focus:outline-hidden"
+                      >
+                        <option value="">-- Choose Agent --</option>
+                        {availableAgents.map((ag) => (
+                          <option key={ag.id} value={ag.id}>
+                            {ag.name} ({ag.title || ag.role} - {ag.department})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!assignAgentId || assigning}
+                        onClick={handleAssignAgentDirect}
+                        className="rounded-xl bg-[#00288e] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#00288e]/90 disabled:opacity-50 transition-all shrink-0"
+                      >
+                        {assigning ? 'Assigning...' : 'Assign'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-amber-50/60 p-3 border border-amber-100 text-xs text-amber-800">
+                    An investigation specialist will be assigned to your ticket shortly.
+                  </div>
+                )}
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <a
-                href={`mailto:${agent.email}`}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 py-2 font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                <Mail className="h-3.5 w-3.5" />
-                <span>Email</span>
-              </a>
-              <a
-                href={`tel:${agent.phone}`}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 py-2 font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                <Phone className="h-3.5 w-3.5" />
-                <span>Call</span>
-              </a>
-            </div>
-
-            <div className="rounded-xl bg-blue-50/60 p-2.5 border border-blue-100 text-[11px] text-blue-900 flex items-center justify-between">
-              <span>Avg Response Time:</span>
-              <span className="font-bold">{agent.avgResponseTime || '1.2 hrs'}</span>
-            </div>
+            )}
           </div>
 
           {/* Live Communication Chat Box (matching Screenshot 11) */}
@@ -384,24 +511,30 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
             <div className="border-b border-slate-100 p-4 bg-slate-50/60 flex items-center justify-between">
               <div>
                 <h3 className="text-xs font-bold text-slate-900">Live Communication</h3>
-                <p className="text-[10px] text-slate-400">Direct message channel with assigned agent</p>
+                <p className="text-[10px] text-slate-400">Direct message channel for this complaint</p>
               </div>
               <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             </div>
 
             {/* Chat message bubbles */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs bg-[#f8f9ff]/50">
+            <div
+              ref={chatContainerRef}
+              className="flex-1 overflow-y-auto p-4 space-y-3 text-xs bg-[#f8f9ff]/50"
+            >
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-center text-slate-400 text-xs">
                   No messages yet. Send an inquiry below to notify the assigned specialist.
                 </div>
               ) : (
                 messages.map((msg) => {
-                  const isUserSender = msg.senderId === user?.id || msg.senderRole === 'user';
+                  const isCurrentUser = user
+                    ? msg.senderId === user.id || (!msg.senderId && msg.senderRole === user.role)
+                    : false;
+
                   return (
                     <div
                       key={msg.id}
-                      className={`flex flex-col ${isUserSender ? 'items-end' : 'items-start'}`}
+                      className={`flex flex-col ${isCurrentUser ? 'items-end' : 'items-start'}`}
                     >
                       <div className="flex items-center gap-1.5 mb-1 text-[10px] text-slate-400">
                         <span>{msg.senderName}</span>
@@ -410,7 +543,7 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
                       </div>
                       <div
                         className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 shadow-2xs leading-relaxed ${
-                          isUserSender
+                          isCurrentUser
                             ? 'bg-[#00288e] text-white rounded-br-xs'
                             : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
                         }`}
@@ -421,7 +554,6 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
                   );
                 })
               )}
-              <div ref={chatEndRef} />
             </div>
 
             {/* Message input */}
@@ -444,15 +576,23 @@ export const ComplaintDetailsView: React.FC<ComplaintDetailsViewProps> = ({
           </div>
 
           {/* Close & Review Button */}
-          {complaint.status !== 'resolved' && (
+          {complaint.status !== 'resolved' && (user?.role === 'agent' || user?.role === 'admin') && (
             <button
               type="button"
+              disabled={statusUpdating}
               onClick={() => handleStatusUpdate('resolved')}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-3 text-xs font-bold shadow-sm transition-all"
             >
               <CheckCircle2 className="h-4 w-4" />
-              <span>Mark as Resolved & Leave Feedback</span>
+              <span>Mark as Resolved</span>
             </button>
+          )}
+
+          {complaint.status === 'resolved' && (
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 py-3 text-xs font-bold text-emerald-800">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <span>Complaint Successfully Resolved</span>
+            </div>
           )}
         </div>
       </div>

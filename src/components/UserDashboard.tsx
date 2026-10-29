@@ -35,7 +35,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const resolvedCount = complaints.filter((c) => c.status === 'resolved').length;
 
   const filteredList = complaints.filter((c) => {
-    const matchesFilter = selectedFilter === 'all' ? true : c.status === selectedFilter;
+    const matchesFilter =
+      selectedFilter === 'all'
+        ? true
+        : selectedFilter === 'pending'
+        ? (c.status === 'pending' || c.status === 'new')
+        : c.status === selectedFilter;
     const matchesSearch =
       c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -121,8 +126,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-[#0b1c30]">{totalCount || 12}</span>
-            <span className="text-xs font-semibold text-emerald-600">+2 this month</span>
+            <span className="text-3xl font-extrabold text-[#0b1c30]">{totalCount}</span>
+            <span className="text-xs font-semibold text-emerald-600">Total</span>
           </div>
           <p className="mt-1 text-xs text-slate-400">All submitted records</p>
         </div>
@@ -138,7 +143,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-[#0b1c30]">{pendingCount || 3}</span>
+            <span className="text-3xl font-extrabold text-[#0b1c30]">{pendingCount}</span>
             <span className="text-xs text-amber-600 font-medium">Awaiting triage</span>
           </div>
           <p className="mt-1 text-xs text-slate-400">Avg triage: under 2 hrs</p>
@@ -155,7 +160,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-[#0b1c30]">{inProgressCount || 5}</span>
+            <span className="text-3xl font-extrabold text-[#0b1c30]">{inProgressCount}</span>
             <span className="text-xs text-indigo-600 font-medium">Active investigations</span>
           </div>
           <p className="mt-1 text-xs text-slate-400">Assigned specialist on duty</p>
@@ -172,7 +177,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-[#0b1c30]">{resolvedCount || 4}</span>
+            <span className="text-3xl font-extrabold text-[#0b1c30]">{resolvedCount}</span>
             <span className="text-xs font-semibold text-emerald-600">98% within SLA</span>
           </div>
           <p className="mt-1 text-xs text-slate-400">Closed & confirmed</p>

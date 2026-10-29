@@ -143,7 +143,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       {
         id: `tml-${Date.now()}`,
         title: 'Complaint Submitted',
-        description: `System auto-generated ticket #${newId}.`,
+        description: `System auto-generated ticket #${newId}. Status: Pending review.`,
         timestamp: 'Just now',
         type: 'created',
       },
@@ -156,7 +156,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       category: category || 'Other',
       department: department || 'General Services',
       priority: priority as 'low' | 'medium' | 'high' | 'urgent',
-      status: 'new',
+      status: 'pending',
       submittedBy: {
         id: user ? user.id : 'anon',
         name: isAnonymous ? 'Anonymous Employee' : user ? user.name : 'Guest User',
@@ -186,12 +186,31 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         id: `notif-${Date.now()}`,
         userId: user.id,
         title: 'Complaint Logged',
-        description: `Your complaint #${newId} was successfully submitted and queued for review.`,
+        description: `Your complaint #${newId} was successfully submitted and is currently Pending review.`,
         type: 'complaint_received',
         read: false,
         timestamp: 'Just now',
         complaintId: newId,
       });
+    }
+
+    // Create notification for admins about new pending complaint
+    try {
+      const admins = await UserModel.find({ role: 'admin' }).lean<UserDoc[]>();
+      for (const admin of admins) {
+        await NotificationModel.create({
+          id: `notif-${Date.now()}-${admin.id}`,
+          userId: admin.id,
+          title: 'New Complaint Filed',
+          description: `New complaint #${newId} (${category}) submitted by ${isAnonymous ? 'Anonymous' : (user ? user.name : 'Employee')}. Status: Pending.`,
+          type: 'complaint_received',
+          read: false,
+          timestamp: 'Just now',
+          complaintId: newId,
+        });
+      }
+    } catch {
+      // Non-critical notification failure
     }
 
     res.status(201).json({
@@ -237,7 +256,8 @@ router.patch('/:id/status', authenticateToken, async (req: AuthRequest, res: Res
     complaint.updatedAt = new Date().toISOString();
 
     const statusLabels: Record<string, string> = {
-      new: 'New',
+      new: 'Pending',
+      pending: 'Pending',
       in_progress: 'In Progress',
       pending_info: 'Pending Info',
       resolved: 'Resolved',
@@ -261,18 +281,57 @@ router.patch('/:id/status', authenticateToken, async (req: AuthRequest, res: Res
 
     await complaint.save();
 
-    // Notify submitter
+    // Notify submitter (employee)
     if (complaint.submittedBy?.id) {
       await NotificationModel.create({
         id: `notif-${Date.now()}`,
         userId: complaint.submittedBy.id,
-        title: 'Status Updated',
+        title: status === 'resolved' ? 'Complaint Resolved' : 'Status Updated',
         description: `Ticket #${complaint.id} status is now ${statusLabels[status] || status}.`,
         type: 'status_updated',
         read: false,
         timestamp: 'Just now',
         complaintId: complaint.id,
       });
+    }
+
+    // Notify admins if an agent or system resolved/updated status
+    try {
+      const admins = await UserModel.find({ role: 'admin' }).lean<UserDoc[]>();
+      for (const admin of admins) {
+        if (!user || user.id !== admin.id) {
+          await NotificationModel.create({
+            id: `notif-${Date.now()}-${admin.id}`,
+            userId: admin.id,
+            title: status === 'resolved' ? 'Complaint Resolved' : 'Status Updated',
+            description: `Ticket #${complaint.id} was marked as ${statusLabels[status] || status} by ${user ? user.name : 'Agent'}.`,
+            type: 'status_updated',
+            read: false,
+            timestamp: 'Just now',
+            complaintId: complaint.id,
+          });
+        }
+      }
+    } catch {
+      // Non-critical notification failure
+    }
+
+    // Notify assigned agent if admin altered status
+    if (complaint.assignedAgent?.id && (!user || user.id !== complaint.assignedAgent.id)) {
+      try {
+        await NotificationModel.create({
+          id: `notif-${Date.now()}-${complaint.assignedAgent.id}`,
+          userId: complaint.assignedAgent.id,
+          title: status === 'resolved' ? 'Complaint Resolved' : 'Status Updated',
+          description: `Ticket #${complaint.id} status was updated to ${statusLabels[status] || status} by ${user ? user.name : 'Admin'}.`,
+          type: 'status_updated',
+          read: false,
+          timestamp: 'Just now',
+          complaintId: complaint.id,
+        });
+      } catch {
+        // Non-critical notification failure
+      }
     }
 
     res.json({ complaint });
@@ -312,10 +371,14 @@ router.patch('/:id/assign', authenticateToken, requireRole(['admin']), async (re
       avgResponseTime: '1.2 hrs',
     };
 
+    // When admin assigns an agent, move status to in_progress
+    complaint.status = 'in_progress';
+    complaint.updatedAt = new Date().toISOString();
+
     complaint.timeline.unshift({
       id: `tml-${Date.now()}`,
       title: `Assigned to ${agent.name}`,
-      description: `Ticket assigned to ${agent.name} (${agent.title || 'Agent'}).`,
+      description: `Ticket assigned to ${agent.name} (${agent.title || 'Agent'}). Status moved to In Progress.`,
       timestamp: 'Just now',
       actor: {
         name: req.user ? req.user.name : 'System Admin',
@@ -326,17 +389,34 @@ router.patch('/:id/assign', authenticateToken, requireRole(['admin']), async (re
 
     await complaint.save();
 
+    // Notify submitter (employee)
     if (complaint.submittedBy?.id) {
       await NotificationModel.create({
         id: `notif-${Date.now()}`,
         userId: complaint.submittedBy.id,
-        title: 'Agent Assigned',
-        description: `${agent.name} has been assigned to your complaint #${complaint.id}.`,
+        title: 'Agent Assigned - In Progress',
+        description: `${agent.name} has been assigned to your complaint #${complaint.id}. Investigation is now In Progress.`,
         type: 'agent_assigned',
         read: false,
         timestamp: 'Just now',
         complaintId: complaint.id,
       });
+    }
+
+    // Notify assigned agent
+    try {
+      await NotificationModel.create({
+        id: `notif-${Date.now()}-agent`,
+        userId: agent.id,
+        title: 'New Complaint Assigned',
+        description: `Complaint #${complaint.id} (${complaint.title}) has been assigned to you. Status: In Progress.`,
+        type: 'agent_assigned',
+        read: false,
+        timestamp: 'Just now',
+        complaintId: complaint.id,
+      });
+    } catch {
+      // Non-critical notification failure
     }
 
     res.json({ complaint });

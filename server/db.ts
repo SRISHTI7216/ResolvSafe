@@ -188,7 +188,7 @@ export async function seedMongoDB(force: boolean = false): Promise<void> {
       category: 'Billing & Finance',
       department: 'Billing & Finance',
       priority: 'high',
-      status: 'new',
+      status: 'pending',
       submittedBy: {
         id: 'usr-alex',
         name: 'Alex Rivera',
@@ -215,7 +215,7 @@ export async function seedMongoDB(force: boolean = false): Promise<void> {
       category: 'Technical Support',
       department: 'IT Support',
       priority: 'medium',
-      status: 'new',
+      status: 'pending',
       submittedBy: {
         id: 'usr-alex',
         name: 'Alex Rivera',

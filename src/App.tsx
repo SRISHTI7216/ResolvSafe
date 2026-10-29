@@ -53,6 +53,8 @@ function MainApp() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchData();
+      const interval = setInterval(fetchData, 4000);
+      return () => clearInterval(interval);
     }
   }, [isAuthenticated]);
 
@@ -78,7 +80,7 @@ function MainApp() {
     try {
       await api.updateComplaintStatus(id, newStatus);
       await fetchData();
-      if (newStatus === 'resolved') {
+      if (newStatus === 'resolved' && user?.role === 'user') {
         setFeedbackComplaintId(id);
       }
     } catch (err) {
@@ -288,6 +290,7 @@ function MainApp() {
         <ComplaintDetailsView
           complaintId={selectedComplaintId}
           onBack={() => {
+            fetchData();
             setCurrentView(
               user?.role === 'agent'
                 ? 'agent_dashboard'
@@ -297,6 +300,7 @@ function MainApp() {
             );
           }}
           onOpenFeedback={(id) => setFeedbackComplaintId(id)}
+          onStatusUpdated={fetchData}
         />
       );
     }

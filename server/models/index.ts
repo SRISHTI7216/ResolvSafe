@@ -127,7 +127,7 @@ const ComplaintSchema = new Schema<ComplaintDoc>(
     status: {
       type: String,
       enum: ['new', 'pending', 'in_progress', 'pending_info', 'resolved', 'rejected'],
-      default: 'new',
+      default: 'pending',
     },
     submittedBy: {
       id: { type: String, required: true },

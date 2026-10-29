@@ -57,7 +57,12 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
 
   const filteredQueue = complaints.filter((c) => {
     const matchesDept = deptFilter === 'all' || c.department.toLowerCase() === deptFilter.toLowerCase();
-    const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
+    const matchesStatus =
+      statusFilter === 'all'
+        ? true
+        : statusFilter === 'pending'
+        ? (c.status === 'pending' || c.status === 'new')
+        : c.status === statusFilter;
     const matchesSearch =
       c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -450,9 +455,8 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
               className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:border-[#00288e] focus:outline-hidden"
             >
               <option value="all">All Statuses</option>
-              <option value="new">New</option>
-              <option value="in_progress">In Progress</option>
               <option value="pending">Pending</option>
+              <option value="in_progress">In Progress</option>
               <option value="resolved">Resolved</option>
             </select>
           </div>
@@ -504,13 +508,17 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
                     <td className="px-5 py-4">{getStatusBadge(item.status)}</td>
                     <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                       {item.assignedAgent ? (
-                        <div className="flex items-center gap-2">
+                        <div
+                          className="flex items-center gap-2 cursor-pointer hover:opacity-80 group/assign"
+                          onClick={() => setAssigningTicketId(item.id)}
+                          title="Click to reassign agent"
+                        >
                           <img
                             src={item.assignedAgent.avatar}
                             alt=""
                             className="h-6 w-6 rounded-full object-cover ring-1 ring-slate-200"
                           />
-                          <span className="font-medium text-slate-800 text-xs">
+                          <span className="font-medium text-slate-800 text-xs group-hover/assign:text-[#00288e] group-hover/assign:underline">
                             {item.assignedAgent.name}
                           </span>
                         </div>
